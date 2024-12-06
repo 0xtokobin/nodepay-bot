@@ -209,24 +209,41 @@ class ReferralClient:
         
     def _generate_credentials(self, real_email: Optional[str] = None) -> Tuple[str, str, str]:
         if self.use_real_emails and real_email:
-            email = real_email
-            # 从邮箱地址中提取用户名部分作为username
-            username = email.split('@')[0][:15] + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+            email = real_email.strip()
+            if not is_valid_email(email):
+                log_step(f"Invalid email format: {email}", "error")
+                raise ValueError(f"Invalid email format: {email}")
+            
+            email_username = ''.join(c for c in email.split('@')[0] if c.isalnum())
+            username = (email_username[:10] + 
+                       ''.join(random.choices(string.ascii_lowercase + string.digits, k=5)))
+            self.password = self._generate_password()
         else:
             email_domains = ["@gmail.com", "@outlook.com", "@yahoo.com", "@hotmail.com"]
-            username = self.faker.user_name()[:15] + ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+            base_username = ''.join(c for c in self.faker.user_name() if c.isalnum())
+            username = (base_username[:10] + 
+                       ''.join(random.choices(string.ascii_lowercase + string.digits, k=5)))
             email = f"{username}{random.choice(email_domains)}"
+            self.password = self._generate_password()
             
-        password = (
-            random.choice(string.ascii_uppercase) +
-            ''.join(random.choices(string.digits, k=3)) +
-            '@' +
-            ''.join(random.choices(string.ascii_lowercase, k=8)) +
-            random.choice(string.ascii_uppercase)
-        )
         self.email = email
-        self.password = password
-        return username, email, password
+        log_step(f"Generated credentials for: {email}:{self.password}", "info")
+        return username, email, self.password
+
+    def _generate_password(self) -> str:
+        uppercase = random.choice(string.ascii_uppercase)
+        lowercase = ''.join(random.choices(string.ascii_lowercase, k=3))
+        numbers = ''.join(random.choices(string.digits, k=2))
+        special = random.choice('!@#$%^&*')
+        
+        remaining = ''.join(random.choices(
+            string.ascii_letters + string.digits + '!@#$%^&*',
+            k=5
+        ))
+        
+        password = list(uppercase + lowercase + numbers + special + remaining)
+        random.shuffle(password)
+        return ''.join(password)
 
     def _update_proxy(self):
         if self.proxy_manager:
@@ -398,6 +415,12 @@ class ReferralClient:
         return None
 
 
+def is_valid_email(email: str) -> bool:
+    import re
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(pattern, email))
+
+
 async def main():
     ref_code = input(f"{Fore.GREEN}请输入你的 Nodepay 邀请码（例如：PQVtq3L1OjH8pMe）: {Style.RESET_ALL}")
     
@@ -412,9 +435,14 @@ async def main():
     if use_real_emails:
         try:
             with open('emails.txt', 'r') as f:
-                real_emails = [line.strip() for line in f if line.strip()]
+                real_emails = []
+                for line in f:
+                    if line.strip():
+                        email = line.strip().split(':', 1)[0]
+                        if '@' in email and is_valid_email(email):
+                            real_emails.append(email)
             if not real_emails:
-                log_step("emails.txt 是空的，将使用随机生成的邮箱", "warning")
+                log_step("emails.txt 是空的，将���用随机生成的邮箱", "warning")
                 use_real_emails = False
             else:
                 log_step(f"成功从 emails.txt 加载了 {len(real_emails)} 个邮箱", "success")
