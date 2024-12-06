@@ -11,6 +11,7 @@ NodePay 批量邀请注册
 - 完整的错误处理和重试机制
 - 详细的日志输出
 
-pip install -r requirements.txt
 
-python main.py
+`pip install -r requirements.txt`
+
+`python main.py`
